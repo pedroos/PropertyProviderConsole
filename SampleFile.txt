@@ -1,0 +1,43 @@
+Collections, Multiset
+Collections, Tuple
+Collections, Struct
+Collections, ElementNamedTuple
+Collections, Set
+Collections, Track
+Collections, Array
+Collections, String
+Collections, Column
+
+Properties, NaturalOrdering
+Properties, ElementNaming
+Properties, Uniqueness
+Properties, Typing
+Properties, Naming
+
+// Primitives
+
+// Multiset has no properties
+
+Collections.Tuple , Properties.NaturalOrdering
+Collections.Struct, Properties.ElementNaming
+Collections.Set   , Properties.Uniqueness
+Collections.Track , Properties.Typing
+Collections.String, Properties.Naming
+
+Collections.ElementNamedTuple, Properties.ElementNaming
+Collections.ElementNamedTuple, Properties.NaturalOrdering
+Collections.Array            , Properties.NaturalOrdering
+Collections.Array            , Properties.Typing
+Collections.Column           , Properties.Naming
+Collections.Column           , Properties.NaturalOrdering
+Collections.Column           , Properties.Typing
+
+// Composites
+
+//Collections.ElementNamedTuple, Collections.Struct
+//Collections.ElementNamedTuple, Collections.Tuple
+//Collections.Array            , Collections.Tuple
+//Collections.Array            , Collections.Track
+//Collections.Column           , Collections.String
+//Collections.Column           , Collections.Tuple
+//Collections.Column           , Collections.Track
