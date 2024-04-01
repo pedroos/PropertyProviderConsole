@@ -1,3 +1,19 @@
+// Property Provider
+// Copyright (C) 2024 Pedro Sobota
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 using System.IO;
 using static System.Console;
 using static System.Environment;
@@ -196,7 +212,7 @@ void ProcessMainCmd(string inpt, out bool stateToSub) {
             throw new CommandException($"The file '{pth}' was " + 
                 "not found");
         try {
-            LoadFile(pth, out LoadFileStats stats, dbg: null/*Out*/);
+            LoadFile(pth, out LoadFileStats stats, dbg: null);
             
             WriteLine($"{stats.ClassesConstructed} classes constructed");
             WriteLine($"{stats.ClassElementsAdded} class elements added");

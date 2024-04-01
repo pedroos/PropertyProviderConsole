@@ -74,7 +74,7 @@ Shows the current table.
 
 Breaks back into the main prompt as-is.
 
-` > c|clear`
+`> c|clear`
 
 Breaks back into the main prompt, clearing the last table output.
 
@@ -86,7 +86,7 @@ Navigates to the previous, next, first, last, or specific page, respectively.
 
 `> save`
 
-Writes the complete last table output to the output file. Unlike visualization through the prompt, this output is not truncated to a single page but rather contains the full table.
+Writes the complete last table output to the output file. Unlike visualization through the prompt, this output is not paged but rather contains the full table.
 
 ## Sample file
 
@@ -125,7 +125,7 @@ General rules
    - Must be the second section
    - A comma delimits the key element from the value element
    - Elements are qualified in the format `[class name].[element name]`
-   - A single class can't be both a key and a value in a relation
+   - A class can't be both a key and a value in a relation
 
    Example:
 
