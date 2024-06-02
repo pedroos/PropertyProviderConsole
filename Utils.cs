@@ -37,6 +37,13 @@ public static class Utils {
         return elem != null;
     }
     
+    public static TO CheckEmpty<TI, TO>(
+        this IEnumerable<TI> coll, 
+        Func<IEnumerable<TI>, TO> nonEmpty, 
+        TO empty
+    ) =>
+        coll.Any() ? nonEmpty(coll) : empty;
+    
     public static string Combine(this string path1, string path2) =>
         Path.Combine(path1, path2);
         

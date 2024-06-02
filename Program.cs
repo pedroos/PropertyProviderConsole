@@ -171,10 +171,10 @@ while (true) {
     };
     Write(prompt);
     string inpt = autoInput ?? ReadLine();
-    // If cancel (Ctrl + B) was pressed
+    // If cancel/SIGINT (Ctrl + C) was pressed
     if (inpt == null) {
         // Equivalent to b|break
-        SkipAreaIfAny(eraseClearArea: false);
+        SkipAreaIfAny();
         state = State.Main;
         WriteLine(); WriteLine();
         continue; 
@@ -250,10 +250,12 @@ void ProcessMainCmd(string inpt, out bool stateToSub) {
         }
     }
     else if (inpt == "classes") {
-        WriteLine(classes.Keys.Join(", "));
+        WriteLine(classes.Keys.CheckEmpty(x => x.Join(", "), 
+            "No loaded classes"));
     }
     else if (inpt == "relations") {
-        WriteLine(relations.Keys.Join(", "));
+        WriteLine(relations.Keys.CheckEmpty(x => x.Join(", "),
+            "No loaded relations"));
     }
     else if (classes.ContainsKey(inpt)) {
         WriteLine(classes[inpt].Join(", "));
