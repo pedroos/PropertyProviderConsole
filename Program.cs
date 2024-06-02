@@ -1,4 +1,4 @@
-// Property Provider
+﻿// Property Provider
 // Copyright (C) 2024 Pedro Sobota
 //
 // This program is free software: you can redistribute it and/or modify
@@ -43,8 +43,8 @@ void LoadFile(string pth, out LoadFileStats stats, TextWriter? dbg = null) {
     for (int i = 0; i < lns.Length; i++) {
         dbg?.Write($"{i + 1} ");
         string ln = lns[i].Trim();
-        if (ln.Length == 0 || ln.StartsWith("//") || 
-            ln.StartsWith("#")) continue;
+        if (ln.Length == 0 || ln.StartsWith("//") || ln.StartsWith("#")) 
+            continue;
         string[] spl = ln.Split(",");
         if (spl.Length != 2) throw new ParseException(
             $"Line {i + 1}: 2 terms expected, but {spl.Length} found");
@@ -55,7 +55,7 @@ void LoadFile(string pth, out LoadFileStats stats, TextWriter? dbg = null) {
         if (aIsQualified != bIsQualified) 
             throw new ParseException($"Line {i}, term {
                 (aIsQualified ? "2" : "1")}: missing qualification");
-        if (!a.Contains('.')) {
+        if (!aIsQualified) {
             // Class element
             string clss = a;
             if (!classes.ContainsKey(clss)) {
@@ -121,10 +121,20 @@ void LoadFile(string pth, out LoadFileStats stats, TextWriter? dbg = null) {
 
 #region Constants
 
-string outDir = GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
-    .Combine("PropertyProvider");
-if (!Directory.Exists(outDir)) Directory.CreateDirectory(outDir);
-string outPath = outDir.Combine("PropertyProviderOut.txt");
+// Shield the values from modification
+
+static Constants GetConstants(string[] args) {
+    string outDir = GetFolderPath(SpecialFolder.LocalApplicationData)
+        .Combine("PropertyProvider");
+    if (!Directory.Exists(outDir)) Directory.CreateDirectory(outDir);
+    string outPath = outDir.Combine("PropertyProviderOut.txt");
+
+    var dbg = args.LongArgExists("dbg") ? Out : null;
+    
+    return new(outPath, dbg);
+}
+
+Lazy<Constants> constants = new(() => GetConstants(args));
 
 #endregion
 
@@ -134,10 +144,11 @@ State state = State.Main;
 int currPage = 1;
 (string, string) currRelation = default!;
 (int, int)? clearArea = null;
-Symb? currReferenceA = null!;
+Symb? currReferenceA = null;
 bool currDissimilarity = false;
 bool currShowEquality = false;
 string? autoInput = null;
+bool stateToMain = false;
 
 #endregion State
 
@@ -145,6 +156,12 @@ string? autoInput = null;
 
 WriteLine("PropertyProvider v0.1");
 WriteLine();
+
+CancelKeyPress += (_, e) => {
+    constants.Value.Dbg?.WriteLine("CancelKeyPress");
+    if (state == State.Sub) 
+        e.Cancel = true;
+};
 
 while (true) {
     int cursorTop = CursorTop;
@@ -154,6 +171,14 @@ while (true) {
     };
     Write(prompt);
     string inpt = autoInput ?? ReadLine();
+    // If cancel (Ctrl + B) was pressed
+    if (inpt == null) {
+        // Equivalent to b|break
+        SkipAreaIfAny(eraseClearArea: false);
+        state = State.Main;
+        WriteLine(); WriteLine();
+        continue; 
+    }
     if (autoInput != null) { WriteLine(); autoInput = null; }
     int inptLen = inpt.Length + prompt.Length;
     if (state == State.Main) {
@@ -175,7 +200,7 @@ while (true) {
     }
     else if (state == State.Sub) {
         try {
-            ProcessSubCmd(inpt, out bool stateToMain);
+            ProcessSubCmd(inpt, out stateToMain);
             if (!stateToMain) {
                 CursorTop = cursorTop;
                 CursorLeft = 0;
@@ -192,27 +217,27 @@ while (true) {
         }
     }
 }
-
+    
 void ProcessMainCmd(string inpt, out bool stateToSub) {
     stateToSub = false;
     if (inpt == "help") {
-        string ln = 
-            "exit, outfile, classes, relations, [className], " + NewLine +
-            "[className] v [className]" + NewLine +
-            "[className] v [className] (!|!!|?|??) [classElement]";
+        string ln = """
+        exit, outfile, classes, relations, [className],
+        [className] v [className]
+        [className] v [className] (!|!!|?|??) [classElement]
+        """;
         WriteLine(ln);
         clearArea = GetStrWidthHeight(ln);
     }
     else if (inpt == "outfile") {
-        WriteLine(outPath);
+        WriteLine(constants.Value.OutPath);
     }
     else if (inpt.StartsWith("load ")) {
         string pth = inpt[5..];
         if (!File.Exists(pth)) 
-            throw new CommandException($"The file '{pth}' was " + 
-                "not found");
+            throw new CommandException($"The file '{pth}' was not found");
         try {
-            LoadFile(pth, out LoadFileStats stats, dbg: null);
+            LoadFile(pth, out LoadFileStats stats, dbg: constants.Value.Dbg);
             
             WriteLine($"{stats.ClassesConstructed} classes constructed");
             WriteLine($"{stats.ClassElementsAdded} class elements added");
@@ -246,8 +271,7 @@ void ProcessMainCmd(string inpt, out bool stateToSub) {
         if (!classes.ContainsKey(val))
             throw new CommandException($"Class not found: {val}");
         if (!relations.ContainsKey((key, val))) 
-            throw new CommandException($"Relation not found: ({
-                key}, {val})");
+            throw new CommandException($"Relation not found: {key}, {val}");
         currRelation = (key, val);
         currReferenceA = null;
         state = State.Sub;
@@ -270,12 +294,9 @@ void ProcessMainCmd(string inpt, out bool stateToSub) {
         if (!classes.ContainsKey(val))
             throw new CommandException($"Class not found: {val}");
         if (!relations.ContainsKey((key, val))) 
-            throw new CommandException($"Relation not found: ({
-                key}, {val})");
-        if (!keyClass.SingleGet(x => x.Name == rfa, 
-            out currReferenceA)) 
-            throw new CommandException($"Element not found: {
-                key}.{rfa}");
+            throw new CommandException($"Relation not found: {key}, {val}");
+        if (!keyClass.SingleGet(x => x.Name == rfa, out currReferenceA)) 
+            throw new CommandException($"Element not found: {key}.{rfa}");
         currRelation = (key, val);
         currDissimilarity = eq.In("?", "??");
         currShowEquality = eq.In("!", "?");
@@ -344,24 +365,26 @@ void ProcessSubCmd(string inpt, out bool stateToMain) {
         int numPages = classes[currRelation.Item2].Count;
         
         string parm = match.Groups[1].Value;
-        if (parm == "p") {
+        switch (parm) {
+        case "p":
             if (currPage > 1) currPage--;
-        }
-        else if (parm == "n") {
+            break;
+        case "n":
             if (currPage < numPages) currPage++;
-        }
-        else if (parm == "f") {
+            break;
+        case "f":
             currPage = 1;
-        }
-        else if (parm == "l") {
+            break;
+        case "l":
             currPage = numPages;
-        }
-        else {
+            break;
+        default:
             int pg = int.Parse(parm);
             currPage = 
                 (pg < 1) ? 1 :
                 (pg > numPages) ? numPages :
                 pg;
+            break;
         }
     }
     else {
@@ -371,14 +394,11 @@ void ProcessSubCmd(string inpt, out bool stateToMain) {
     }
     
     if (!relations.TryGetValue(currRelation, out List<(Symb, Symb)> rel)) 
-        throw new CommandException($"Relation not found: {
-            currRelation}");
+        throw new CommandException($"Relation not found: {currRelation}");
     if (!classes.TryGetValue(currRelation.Item1, out List<Symb> keyClass)) 
-        throw new CommandException($"Class not found: {
-            currRelation.Item1}");
+        throw new CommandException($"Class not found: {currRelation.Item1}");
     if (!classes.TryGetValue(currRelation.Item2, out List<Symb> valClass)) 
-        throw new CommandException($"Class not found: {
-            currRelation.Item2}");
+        throw new CommandException($"Class not found: {currRelation.Item2}");
     
     // The presence of `currReferenceA` denotes it's a Scoring table, vs. a 
     // Relation table
@@ -410,13 +430,12 @@ void ProcessSubCmd(string inpt, out bool stateToMain) {
             valueToString: v => v.Name,
             tableData: tableData,
             page: !save ? currPage : null,
-            unicode: false
+            unicode: false,
+            dbg: constants.Value.Dbg
         );
         
         if (!save) foreach (string ln in lns) WriteLine(ln);
-        else {
-            File.AppendAllLines(outPath, lns);
-        }
+        else File.AppendAllLines(constants.Value.OutPath, lns);
     }
     else {
         var t = ScoreGrouped(CartesianJoinScore(
@@ -453,9 +472,7 @@ void ProcessSubCmd(string inpt, out bool stateToMain) {
         );
         
         if (!save) foreach (string ln in lns) WriteLine(ln);
-        else {
-            File.AppendAllLines(outPath, lns);
-        }
+        else File.AppendAllLines(constants.Value.OutPath, lns);
     }
 }
 
@@ -571,7 +588,7 @@ static TableData GetTableData<TKey, TValue>(
     Func<TValue, string> valueToString,
     int? page = null,
     TextWriter? dbg = null
-) {
+) where TKey : notnull where TValue : notnull {
     int valTotalColCount = table.Max(s => s.Count());
     dbg?.WriteLine($"valTotalColCount is {valTotalColCount}");
     int keyColWidth = Math.Max(
@@ -792,6 +809,11 @@ class CommandException : Exception {
     public CommandException(string message) : base(message) {}
 }
 
+record Constants(
+    string OutPath,
+    TextWriter? Dbg
+);
+
 record CartesianJoinScoreData(
     Symb A, 
     Symb B, 
@@ -826,8 +848,7 @@ static class Symbols {
         if (classSymbols.TryGetValue(className, out HashSet<string>? hs) && 
             hs.Contains(symbolName))
             throw new ArgumentException(
-                $"Class '{className}' already contains symbol '{
-                    symbolName}'");
+                $"Class '{className}' already contains symbol '{symbolName}'");
         if (hs == null)
             classSymbols.Add(className, hs = new());
         int id = !classSeqPointers.TryGetValue(className, out id) ?

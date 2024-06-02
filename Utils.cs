@@ -1,4 +1,4 @@
-﻿// Property Provider
+// Property Provider
 // Copyright (C) 2024 Pedro Sobota
 //
 // This program is free software: you can redistribute it and/or modify
@@ -69,6 +69,11 @@ public static class Utils {
         this IEnumerable<string> strings
     ) => 
         strings.Select(s => $"'{s}'");
+
+    public static bool LongArgExists(
+        this string[] args, 
+        string name
+    ) => args.Any(a => a == $"--{name}");
 }
 
 // https://stackoverflow.com/a/5073144/38234
