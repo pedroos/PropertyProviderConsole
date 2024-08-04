@@ -6,6 +6,11 @@ Property Provider defines a set of operations on relations. This console program
 
 Run `pp.exe` or `pp` on your terminal.
 
+Available options:
+
+`--help`, `-h`: shows help.
+`--file [file]`: opens a file on startup.
+
 ## Commands
 
 There are two levels of prompt: main (`PP>`) and table (`>`). Please inspect the prompt marker to determine the currently active prompt.
@@ -16,13 +21,13 @@ There are two levels of prompt: main (`PP>`) and table (`>`). Please inspect the
 
 Quit.
 
-`PP> help`
+`PP> h|help`
 
 Get help.
 
 `PP> load [file path]`
 
-Load an input file (full path, no quotes).
+Load an input file (no quotes, in current directory or full path).
 
 `PP> classes`
 
@@ -40,21 +45,21 @@ List the elements of a class.
 
 Plot a relation joining two classes.
 
-`PP> [class name] v [class name] ! [element name]`
+`PP> [class name] v [class name] . [element name]`
 
 Score an element of a **key** class against elements in the same class with respect to a **value** class for **similarity**.
 
-`PP> [class name] v [class name] !! [element name]`
+`PP> [class name] v [class name] .. [element name]`
 
-Same as the last one, but shows **true** values (*characteristics*) instead of **equal** values.
+Same as the last one, but displays **true** values (*characteristics*) instead of **equal** values.
 
-`PP> [class name] v [class name] ? [element name]`
+`PP> [class name] v [class name] , [element name]`
 
 Score an element of a **key** class against elements in the same class with respect to a **value** class for **dissimilarity**.
 
-`PP> [class name] v [class name] ?? [element name]`
+`PP> [class name] v [class name] ,, [element name]`
 
-Same as the last one, but shows **true** values (*characteristics*) instead of **equal** values.
+Same as the last one, but displays **true** values (*characteristics*) instead of **equal** values.
 
 `PP> outfile`
 
@@ -62,23 +67,21 @@ Prints the path of the output file.
 
 **Table commands**
 
-`> help`
+`> exit`
+
+Quit.
+
+`> h|help`
 
 Get help.
 
-`> s|show`
+`> d|display`
 
-Shows the current table.
+Displays the current table.
 
 `> b|break`
 
-Breaks back into the main prompt as-is.
-
-`> c|clear`
-
-Breaks back into the main prompt, clearing the last table output.
-
-> Obs.: this command is not working on Linux. We're working on a fix for it.
+Breaks back into the main prompt.
 
 `> pp|pn|pf|pl|p[page number]`
 
@@ -142,7 +145,9 @@ General rules
 To build:
 
 1. Download a `bflat v8.x` release from https://github.com/bflattened/bflat/releases and add the executable to your path
-2. Adjust the paths and run the files or copy-and-paste the commands from `build.ps1` or `build.sh` into your terminal
+2. Navigate to the source directory in your terminal
+3. Run `powershell -c ". ./build.ps1"`
+4. The executable will be output to "bin\pp.exe" or "./bin/pp"
 
 ### Dependencies
 
@@ -155,4 +160,8 @@ To build:
     sudo apt install libc++-dev
     ```
 
-    before building.
+    On Fedora 39, run:
+    
+    ```
+    sudo dnf install libcxx
+    ```

@@ -1,4 +1,4 @@
-﻿// Property Provider
+// Property Provider
 // Copyright (C) 2024 Pedro Sobota
 //
 // This program is free software: you can redistribute it and/or modify
@@ -14,17 +14,20 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-using System.IO;
-using static System.Console;
-using static System.Environment;
-using static System.Text.Encoding;
-using static Utils;
-
 using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
+using static System.Console;
+using static System.Environment;
+using static System.Text.Encoding;
+using static Utils;
+using static State;
 
 #region Data
 
@@ -76,8 +79,8 @@ void LoadFile(string pth, out LoadFileStats stats, TextWriter? dbg = null) {
                         sp.Length} found");
                 string clss = sp[0].Trim();
                 if (!classes.ContainsKey(clss)) 
-                    throw new ParseException($"Line {i + 1}, term {tno}: " + 
-                        $"undeclared class '{clss}'");
+                    throw new ParseException($"Line {i + 1}, term {tno
+                        }: undeclared class '{clss}'");
                 // Ok, construct a symbol
                 string el = sp[1].Trim();
                 Symb symb = 
@@ -121,17 +124,17 @@ void LoadFile(string pth, out LoadFileStats stats, TextWriter? dbg = null) {
 
 #region Constants
 
+var dbg = args.LongArgExists("dbg") ? Out : null;
+
 // Shield the values from modification
 
 static Constants GetConstants(string[] args) {
     string outDir = GetFolderPath(SpecialFolder.LocalApplicationData)
         .Combine("PropertyProvider");
     if (!Directory.Exists(outDir)) Directory.CreateDirectory(outDir);
-    string outPath = outDir.Combine("PropertyProviderOut.txt");
-
-    var dbg = args.LongArgExists("dbg") ? Out : null;
+    string outPath = outDir.Combine("PropertyProviderOutput.txt");
     
-    return new(outPath, dbg);
+    return new(outPath);
 }
 
 Lazy<Constants> constants = new(() => GetConstants(args));
@@ -140,104 +143,191 @@ Lazy<Constants> constants = new(() => GetConstants(args));
 
 #region State
 
-State state = State.Main;
+State state = Main;
 int currPage = 1;
 (string, string) currRelation = default!;
-(int, int)? clearArea = null;
 Symb? currReferenceA = null;
 bool currDissimilarity = false;
-bool currShowEquality = false;
+bool currDisplayEquality = false;
+string currPrompt = null!;
 string? autoInput = null;
-bool stateToMain = false;
+
+CancellationTokenSource mainCts = new();
+CancellationTokenSource cmdCts = null;
 
 #endregion State
 
-#region Loop
+#region Event handlers
 
-WriteLine("PropertyProvider v0.1");
-WriteLine();
+// Cancel/SIGINT (Ctrl + C) handler
 
 CancelKeyPress += (_, e) => {
-    constants.Value.Dbg?.WriteLine("CancelKeyPress");
-    if (state == State.Sub) 
-        e.Cancel = true;
+    dbg?.WriteLine("CancelKeyPress");
+    e.Cancel = true;
+    #if LINUX
+    cmdCts.Cancel();
+    #endif
 };
 
-while (true) {
-    int cursorTop = CursorTop;
-    string prompt = state switch {
-        State.Main => "PP> ",
-        State.Sub => "> "
+// Exit handler
+
+AppDomain.CurrentDomain.ProcessExit += (_, _) => {
+    dbg?.WriteLine("ProcessExit");
+    mainCts.Cancel();
+    WriteLine();
+};
+
+#endregion Event handlers
+
+#region Loop
+
+WriteLine("PropertyProvider v0.1.1");
+WriteLine();
+
+if (args.LongArgExists("help") || args.ShortArgExists('h')) {
+    WriteLine("""
+    Syntax: pp [--file [input file name] (optional)]
+    """);
+    return 0;
+}
+if (args.TryGetArgv("file", out string infl)) autoInput = $"load {infl}";
+
+void WritePrompt() {
+    currPrompt = state switch {
+        Main => "PP> ",
+        Sub => "> "
     };
-    Write(prompt);
-    string inpt = autoInput ?? ReadLine();
-    // If cancel/SIGINT (Ctrl + C) was pressed
-    if (inpt == null) {
-        // Equivalent to b|break
-        SkipAreaIfAny();
-        state = State.Main;
-        WriteLine(); WriteLine();
-        continue; 
+    Write(currPrompt);
+    Out.Flush();
+}
+
+/*
+e.Cancel interrupts ReadOnline() on Windows, not on Linux. Thus, control flow 
+resumes on Windows while cancellation of the ReadLine task (using Wait(token)) 
+and handling of the cancellation exception are implemented on Linux.
+However, interrupting ReadLine on Linux interferes with subsequent input. Thus, 
+we loop on a background thread printing additional prompts on cancellation key  
+events while ReadLine runs in the main thread.
+*/
+
+#if LINUX
+
+// Input loop (background)
+
+Task.Run(() => {
+    while (!mainCts.IsCancellationRequested) {
+        WritePrompt();
+        string inpt = autoInput ?? ReadLine();
+        if (inpt == null) throw new UnreachableException();
+        else if (inpt == "exit") {
+            mainCts.Cancel();
+            cmdCts.Cancel();
+        }
+        else HandleInput(inpt);
     }
-    if (autoInput != null) { WriteLine(); autoInput = null; }
-    int inptLen = inpt.Length + prompt.Length;
-    if (state == State.Main) {
-        if (inpt == "exit") return 0;
-        try {
-            ProcessMainCmd(inpt, out bool stateToSub);
-            if (stateToSub) {
-                CursorTop = cursorTop + 1;
-                CursorLeft = 0;
-            }
-            else {
-                WriteLine();
-            }
-        }
-        catch (CommandException ex) {
-            WriteLine(ex.Message);
-            WriteLine();
-        }
+});
+
+// Cancel loop (foreground)
+
+while (!mainCts.IsCancellationRequested) {
+    cmdCts = new();
+    
+    dbg?.WriteLine("Start cancel loop");
+    try {        
+        while (true) 
+            Task.Delay(1000, cmdCts.Token).Wait(cmdCts.Token);
     }
-    else if (state == State.Sub) {
-        try {
-            ProcessSubCmd(inpt, out stateToMain);
-            if (!stateToMain) {
-                CursorTop = cursorTop;
-                CursorLeft = 0;
-                Write(new string(' ', inptLen)); // Erase command
-                CursorLeft = 0;
-            }
-            else {
-                WriteLine();
-            }
-        }
-        catch (CommandException ex) {
-            WriteLine(ex.Message);
-            WriteLine();
+    catch (OperationCanceledException) {
+        dbg?.WriteLine("Command cancellation requested");
+        switch (state) {
+        case Sub:
+            // Equivalent to b|break
+            state = Main;
+            WriteLine(); WriteLine();
+            WritePrompt();
+            break;
+        case Main:
+            // Exit
+            mainCts.Cancel();
+            break;
         }
     }
 }
-    
-void ProcessMainCmd(string inpt, out bool stateToSub) {
-    stateToSub = false;
-    if (inpt == "help") {
+
+cmdCts.Cancel();
+
+#else
+
+while (!mainCts.IsCancellationRequested) {
+    WritePrompt();
+    string inpt = autoInput ?? ReadLine();
+    if (inpt == null) {
+        switch (state) {
+        case Sub:
+            // Equivalent to b|break
+            state = Main;
+            WriteLine(); WriteLine();
+            break;
+        case Main:
+            // Exit
+            mainCts.Cancel();
+            break;
+        }
+    }
+    else if (inpt == "exit") {
+        mainCts.Cancel();
+        cmdCts.Cancel();
+    }
+    else HandleInput(inpt);
+}
+
+#endif
+
+return 0;
+
+void HandleInput(string inpt) {
+    if (autoInput != null) { WriteLine(); autoInput = null; }
+    int inptLen = inpt.Length + currPrompt.Length;
+    try {
+        switch (state) {
+        case Main:
+            ProcessMainCmd(inpt);
+            break;
+        case Sub:
+            ProcessSubCmd(inpt);
+            break;
+        }
+    }
+    catch (CommandException ex) {
+        WriteLine(ex.Message);
+    }
+    WriteLine();
+}
+
+void ProcessMainCmd(string inpt) {
+    if (inpt.In("h", "help")) {
         string ln = """
-        exit, outfile, classes, relations, [className],
+        exit, outfile, classes, relations, [className]
+        load [filename]
         [className] v [className]
-        [className] v [className] (!|!!|?|??) [classElement]
+        [className] v [className] (.|..|,|,,) [classElement]
         """;
         WriteLine(ln);
-        clearArea = GetStrWidthHeight(ln);
     }
     else if (inpt == "outfile") {
         WriteLine(constants.Value.OutPath);
     }
     else if (inpt.StartsWith("load ")) {
         string pth = inpt[5..];
+        
+        if (!Path.IsPathFullyQualified(pth)) 
+            // Try to qualify the path using the current directory
+            pth = CurrentDirectory.Combine(pth);
+        
         if (!File.Exists(pth)) 
             throw new CommandException($"The file '{pth}' was not found");
         try {
-            LoadFile(pth, out LoadFileStats stats, dbg: constants.Value.Dbg);
+            LoadFile(pth, out LoadFileStats stats, dbg: dbg);
             
             WriteLine($"{stats.ClassesConstructed} classes constructed");
             WriteLine($"{stats.ClassElementsAdded} class elements added");
@@ -276,13 +366,12 @@ void ProcessMainCmd(string inpt, out bool stateToSub) {
             throw new CommandException($"Relation not found: {key}, {val}");
         currRelation = (key, val);
         currReferenceA = null;
-        state = State.Sub;
-        stateToSub = true;
+        state = Sub;
         currPage = 1;
-        autoInput = "show";
+        autoInput = "display";
     }
     else if (inpt.Match("^([a-zA-Z]+) (#|x|v|vs|vs.) ([a-zA-Z]+) " + 
-        "(!|!!|\\?|\\?\\?) ([a-zA-Z]+)$", out match)) 
+        "(\\.|\\.\\.|\\,|\\,\\,) ([a-zA-Z]+)$", out match)) 
     {
         string key = match.Groups[1].Value;
         string val = match.Groups[3].Value;
@@ -300,66 +389,31 @@ void ProcessMainCmd(string inpt, out bool stateToSub) {
         if (!keyClass.SingleGet(x => x.Name == rfa, out currReferenceA)) 
             throw new CommandException($"Element not found: {key}.{rfa}");
         currRelation = (key, val);
-        currDissimilarity = eq.In("?", "??");
-        currShowEquality = eq.In("!", "?");
-        state = State.Sub;
-        stateToSub = true;
+        currDissimilarity = eq.In(",", ",,");
+        currDisplayEquality = eq.In(".", ",");
+        state = Sub;
         currPage = 1;
-        autoInput = "show";
+        autoInput = "display";
     }
     else throw new CommandException("Unrecognized command");
 }
 
-void ClearAreaIfAny() {
-    if (clearArea == null) return;
-    var (w, h) = clearArea.Value;
-    CursorLeft = 0;
-    h.Times(() => {
-        Write(new string(' ', w));
-        CursorLeft = 0;
-        CursorTop++;
-    });
-    clearArea = null;
-    CursorTop -= h;
-}
-
-void SkipAreaIfAny(bool eraseClearArea = true) {
-    if (clearArea == null) return;
-    var (_, h) = clearArea.Value;
-    CursorTop += h;
-    CursorLeft = 0;
-    if (eraseClearArea) clearArea = null;
-}
-
-void ProcessSubCmd(string inpt, out bool stateToMain) {
-    stateToMain = false;
-    
+void ProcessSubCmd(string inpt) {
     bool save = false;
     
-    if (inpt == "help") {
-        ClearAreaIfAny();
-        string ln = "b|break, c|clear, pp, pn, pf, pl, p[pageNumber]";
+    if (inpt.In("h", "help")) {
+        string ln = "b|break, pp, pn, pf, pl, p[pageNumber]";
         WriteLine(ln);
-        clearArea = (ln.Length, 1);
         return;
     }
     else if (inpt.In("b", "break")) {
-        SkipAreaIfAny();
-        state = State.Main;
-        stateToMain = true;
-        return;
-    }
-    else if (inpt.In("c", "clear")) {
-        ClearAreaIfAny();
-        state = State.Main;
-        stateToMain = true;
+        state = Main;
         return;
     }
     else if (inpt == "save") {
-        SkipAreaIfAny(eraseClearArea: false);
         save = true;
     }
-    else if (inpt.In("s", "show")) {
+    else if (inpt.In("d", "display")) {
         int numPages = classes[currRelation.Item2].Count;
         currPage = 1;
     }
@@ -390,8 +444,7 @@ void ProcessSubCmd(string inpt, out bool stateToMain) {
         }
     }
     else {
-        SkipAreaIfAny();
-        WriteLine("Command not recognized");
+        WriteLine("Unrecognized command");
         return;
     }
     
@@ -421,9 +474,6 @@ void ProcessSubCmd(string inpt, out bool stateToMain) {
             page: !save ? currPage : null
         );
         
-        // The clear area shouldn't be changed when printing to a file
-        if (!save) clearArea = (tableData.TotalWidth, tableData.TotalHeight);
-        
         var lns = DrawTableBoolean(
             table: t,
             keyColumnName: currRelation.ToString(),
@@ -433,10 +483,10 @@ void ProcessSubCmd(string inpt, out bool stateToMain) {
             tableData: tableData,
             page: !save ? currPage : null,
             unicode: false,
-            dbg: constants.Value.Dbg
+            dbg: dbg
         );
         
-        if (!save) foreach (string ln in lns) WriteLine(ln);
+        if (!save) WriteLines(lns);
         else File.AppendAllLines(constants.Value.OutPath, lns);
     }
     else {
@@ -446,7 +496,7 @@ void ProcessSubCmd(string inpt, out bool stateToMain) {
             rel, 
             currReferenceA,
             currDissimilarity
-        ), showEquality: currShowEquality);
+        ), displayEquality: currDisplayEquality);
         
         string keyColName = currRelation.ToString();
         
@@ -459,9 +509,6 @@ void ProcessSubCmd(string inpt, out bool stateToMain) {
             page: !save ? currPage : null
         );
         
-        // The clear area shouldn't be changed when printing to a file
-        if (!save) clearArea = (tableData.TotalWidth, tableData.TotalHeight);
-        
         var lns = DrawTableBoolean(
             table: t,
             keyColumnName: keyColName,
@@ -473,7 +520,7 @@ void ProcessSubCmd(string inpt, out bool stateToMain) {
             unicode: false
         );
         
-        if (!save) foreach (string ln in lns) WriteLine(ln);
+        if (!save) WriteLines(lns);
         else File.AppendAllLines(constants.Value.OutPath, lns);
     }
 }
@@ -563,7 +610,7 @@ static IEnumerable<IGrouping<(Symb A, int Score), (Symb B, bool AHasB)>>
 ScoreGrouped(
     IEnumerable<CartesianJoinScoreData> data, 
     bool dissimilarity = false,
-    bool showEquality = false
+    bool displayEquality = false
 ) =>
     from g in data.GroupBy(x => x.A)
     let scr = g.Sum(x => x.Score)
@@ -572,25 +619,23 @@ ScoreGrouped(
         (g.Key, scr), 
         g.Select(x => (
             x.B, 
-            !showEquality ? 
-                (!dissimilarity ? x.AHasB : !x.AHasB) : 
-                (!dissimilarity ? x.AHasBEqualsReferenceAHasB : 
-                    !x.AHasBEqualsReferenceAHasB)
+            (!displayEquality ? x.AHasB : x.AHasBEqualsReferenceAHasB)
+                .NegateIf(dissimilarity)
         )));
 
 #endregion Transformations
 
 #region Table drawing
 
-static TableData GetTableData<TKey, TValue>(
-    IEnumerable<IGrouping<TKey, (TValue, bool)>> table,
+static TableData GetTableData<TK, TV>(
+    IEnumerable<IGrouping<TK, (TV, bool)>> table,
     string keyColumnName,
     string columnsName,
-    Func<TKey, string> keyToString,
-    Func<TValue, string> valueToString,
+    Func<TK, string> keyToString,
+    Func<TV, string> valueToString,
     int? page = null,
     TextWriter? dbg = null
-) where TKey : notnull where TValue : notnull {
+) where TK : notnull where TV : notnull {
     int valTotalColCount = table.Max(s => s.Count());
     dbg?.WriteLine($"valTotalColCount is {valTotalColCount}");
     int keyColWidth = Math.Max(
@@ -631,18 +676,18 @@ static TableData GetTableData<TKey, TValue>(
     );
 }
 
-static IEnumerable<string> DrawTableBoolean<TKey, TValue>(
-    IEnumerable<IGrouping<TKey, (TValue, bool)>> table,
+static IEnumerable<string> DrawTableBoolean<TK, TV>(
+    IEnumerable<IGrouping<TK, (TV, bool)>> table,
     string keyColumnName,
     string columnsName,
-    Func<TKey, string> keyToString,
-    Func<TValue, string> valueToString,
+    Func<TK, string> keyToString,
+    Func<TV, string> valueToString,
     // If not passed, it will be calculated
     TableData? tableData = null,
     int? page = null,
     bool unicode = false,
     TextWriter? dbg = null
-) where TKey : notnull where TValue : notnull {
+) where TK : notnull where TV : notnull {
     var (
         valTotalColCount,
         keyColWidth,
@@ -717,7 +762,7 @@ static IEnumerable<string> DrawTableBoolean<TKey, TValue>(
     
     // Initialized to the first column collection to check consistency across 
     // all rows.
-    TValue[] colCheck = null!;
+    TV[] colCheck = null!;
     
     foreach (var kv in table) {
         sb.Clear();
@@ -728,9 +773,11 @@ static IEnumerable<string> DrawTableBoolean<TKey, TValue>(
         var cols = kv.Order().ToArray();
         var colNames = cols.Select(x => x.Item1).ToArray();
         if (colCheck != null && !colNames.SequenceEqual(colCheck)) 
-            throw new ArgumentException($"Inconsistent columns: expected{
-                NewLine}{colCheck.Strs().Quoted().Join(", ")} but got{
-                NewLine}{cols.Strs().Quoted().Join(",  ")}");
+            throw new ArgumentException($"""
+                Inconsistent columns: expected
+                {colCheck.Strs().Quoted().Join(", ")} but got
+                {cols.Strs().Quoted().Join(",  ")}
+             """);
         if (colCheck == null) colCheck = colNames;
         int i = valInitialCol - 1;
         
@@ -776,7 +823,8 @@ static IEnumerable<string> DrawTableBoolean<TKey, TValue>(
     if (page != null) {
         sb.AppendLine();
         sb.Append(new string(' ', keyColWidth + 2));
-        sb.AppendLine("< >");
+        // `WriteLines` adds a trailing newline
+        sb.Append("< >");
     }
     yield return sb.ToString();
 }
@@ -799,8 +847,8 @@ record TableData(
 #region Classes
 
 enum State {
-    Main = 0,
-    Sub = 1
+    Main,
+    Sub
 }
 
 class ParseException : Exception {
@@ -812,8 +860,7 @@ class CommandException : Exception {
 }
 
 record Constants(
-    string OutPath,
-    TextWriter? Dbg
+    string OutPath
 );
 
 record CartesianJoinScoreData(

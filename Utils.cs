@@ -46,13 +46,6 @@ public static class Utils {
     
     public static string Combine(this string path1, string path2) =>
         Path.Combine(path1, path2);
-        
-    // Gets width and height of a multiline string
-    
-    public static (int W, int H) GetStrWidthHeight(string multiline) {
-        string[] spl = multiline.Split(NewLine);
-        return (spl.Max(x => x.Length), spl.Length);
-    }
     
     public static string Join<T>(this IEnumerable<T> list, string separator) => 
         string.Join(separator, list);
@@ -63,11 +56,8 @@ public static class Utils {
     }
     
     public static bool In<T>(this T t, params T[] arr) => arr.Contains(t);
-    
-    public static void Times(this int x, Action a) {
-        for (int i = 0; i < x; i++)
-            a();
-    }
+ 
+    public static bool NegateIf(this bool a, bool b) => a ? !b : b;
     
     public static IEnumerable<string> Strs<T>(this IEnumerable<T> objs) =>
         objs.Select(x => x.ToString() ?? "");
@@ -76,19 +66,55 @@ public static class Utils {
         this IEnumerable<string> strings
     ) => 
         strings.Select(s => $"'{s}'");
+    
+    public static void WriteLines(
+        this TextWriter tw,
+        IEnumerable<string> lns
+    ) => WriteLines(lns, tw);
+    
+    public static void WriteLines(
+        IEnumerable<string> lns,
+        TextWriter? tw = null
+    ) {
+        foreach (string ln in lns) (tw ?? Out).WriteLine(ln);
+    }
 
     public static bool LongArgExists(
         this string[] args, 
         string name
     ) => args.Any(a => a == $"--{name}");
+
+    public static bool ShortArgExists(
+        this string[] args, 
+        char letter
+    ) => args.Any(a => a == $"-{letter}");
+    
+    /// <summary>
+    /// Tries to get the argument in the format: '--[argname]'.
+    /// </summary>
+    /// <param name="twoDashes">If false, the format is '-[argname]'</param>
+    public static bool TryGetArgv(
+        this string[] args, 
+        string name, 
+        out string argv,
+        bool twoDashes = true
+    ) {
+        argv = null!;
+        int pos = -1;
+        for (int i = 0; i < args.Length; i++)
+            if (args[i] == $"{(twoDashes ? "--" : "-")}{name}") { pos = i; break; }
+        if (pos == -1) return false;
+        if (pos == args.Length - 1) return false;
+        if (args[pos + 1].StartsWith(twoDashes ? "--" : "-")) return false;
+        argv = args[pos + 1];
+        return true;
+    }
 }
 
 // https://stackoverflow.com/a/5073144/38234
 public class Grouping<TKey, TElement> : 
     List<TElement>, IGrouping<TKey, TElement> 
 {
-    public Grouping(TKey key) : base() => Key = key;
-    public Grouping(TKey key, int capacity) : base(capacity) => Key = key;
     public Grouping(TKey key, IEnumerable<TElement> collection)
         : base(collection) => Key = key;
     public TKey Key { get; }
