@@ -9,7 +9,8 @@ Run `pp.exe` or `pp` on your terminal.
 Available options:
 
 `--help`, `-h`: shows help.
-`--file [file]`: opens a file on startup.
+
+`--file [file]`, `-f [file]`: opens a file on startup.
 
 ## Commands
 

@@ -190,7 +190,10 @@ if (args.LongArgExists("help") || args.ShortArgExists('h')) {
     """);
     return 0;
 }
-if (args.TryGetArgv("file", out string infl)) autoInput = $"load {infl}";
+if (
+    args.TryGetArgv("file", out string infl) ||
+    args.TryGetArgv("f", out infl, twoDashes: false)
+) autoInput = $"load {infl}";
 
 void WritePrompt() {
     currPrompt = state switch {
@@ -198,16 +201,13 @@ void WritePrompt() {
         Sub => "> "
     };
     Write(currPrompt);
-    Out.Flush();
 }
 
 /*
 e.Cancel interrupts ReadOnline() on Windows, not on Linux. Thus, control flow 
-resumes on Windows while cancellation of the ReadLine task (using Wait(token)) 
-and handling of the cancellation exception are implemented on Linux.
-However, interrupting ReadLine on Linux interferes with subsequent input. Thus, 
-we loop on a background thread printing additional prompts on cancellation key  
-events while ReadLine runs in the main thread.
+resumes on Windows while ReadLine runs in the background and a loop task running 
+in the foreground prints new prompts upon being cancelled (using Wait(token)) on 
+Linux (interrupting ReadLine on Linux interferes with subsequent input).
 */
 
 #if LINUX
