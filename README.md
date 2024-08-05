@@ -18,7 +18,7 @@ There are two levels of prompt: main (`PP>`) and table (`>`). Please inspect the
 
 **Main commands**
 
-`PP> exit`
+`PP> exit`, `Ctrl + C` or `SIGINT`
 
 Quit.
 
@@ -52,7 +52,7 @@ Score an element of a **key** class against elements in the same class with resp
 
 `PP> [class name] v [class name] .. [element name]`
 
-Same as the last one, but displays **true** values (*characteristics*) instead of **equal** values.
+Same as the last one, but displays **true** values (*characteristics*) instead of **equal** values. This table displays the *definitions* of objects.
 
 `PP> [class name] v [class name] , [element name]`
 
@@ -60,7 +60,7 @@ Score an element of a **key** class against elements in the same class with resp
 
 `PP> [class name] v [class name] ,, [element name]`
 
-Same as the last one, but displays **true** values (*characteristics*) instead of **equal** values.
+Same as the last one, but displays **true** values (*characteristics/definition*) instead of **equal** values.
 
 `PP> outfile`
 
@@ -80,7 +80,7 @@ Get help.
 
 Displays the current table.
 
-`> b|break`
+`> b|break`, `Ctrl + C` or `SIGINT`
 
 Breaks back into the main prompt.
 
@@ -90,7 +90,7 @@ Navigates to the previous, next, first, last, or specific page, respectively.
 
 `> save`
 
-Writes the complete last table output to the output file. Unlike visualization through the prompt, this output is not paged but rather contains the full table.
+Writes the complete last table input and output to the output file. Unlike visualization through the prompt, this output is not paged but rather contains the full table.
 
 ## Sample file
 
@@ -148,7 +148,7 @@ To build:
 1. Download a `bflat v8.x` release from https://github.com/bflattened/bflat/releases and add the executable to your path
 2. Navigate to the source directory in your terminal
 3. Run `powershell -c ". ./build.ps1"`
-4. The executable will be output to "bin\pp.exe" or "./bin/pp"
+4. The executable will be output to `bin`
 
 ### Dependencies
 

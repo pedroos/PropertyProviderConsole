@@ -150,6 +150,7 @@ Symb? currReferenceA = null;
 bool currDissimilarity = false;
 bool currDisplayEquality = false;
 string currPrompt = null!;
+string currTableInput = null!;
 string? autoInput = null;
 
 CancellationTokenSource mainCts = new();
@@ -174,6 +175,8 @@ CancelKeyPress += (_, e) => {
 AppDomain.CurrentDomain.ProcessExit += (_, _) => {
     dbg?.WriteLine("ProcessExit");
     mainCts.Cancel();
+    mainCts.Dispose();
+    cmdCts?.Dispose();
     WriteLine();
 };
 
@@ -221,7 +224,7 @@ Task.Run(() => {
         if (inpt == null) throw new UnreachableException();
         else if (inpt == "exit") {
             mainCts.Cancel();
-            cmdCts.Cancel();
+            cmdCts?.Cancel();
         }
         else HandleInput(inpt);
     }
@@ -230,6 +233,7 @@ Task.Run(() => {
 // Cancel loop (foreground)
 
 while (!mainCts.IsCancellationRequested) {
+    cmdCts?.Dispose();
     cmdCts = new();
     
     dbg?.WriteLine("Start cancel loop");
@@ -276,7 +280,7 @@ while (!mainCts.IsCancellationRequested) {
     }
     else if (inpt == "exit") {
         mainCts.Cancel();
-        cmdCts.Cancel();
+        cmdCts?.Cancel();
     }
     else HandleInput(inpt);
 }
@@ -368,10 +372,11 @@ void ProcessMainCmd(string inpt) {
         currReferenceA = null;
         state = Sub;
         currPage = 1;
+        currTableInput = inpt;
         autoInput = "display";
     }
     else if (inpt.Match("^([a-zA-Z]+) (#|x|v|vs|vs.) ([a-zA-Z]+) " + 
-        "(\\.|\\.\\.|\\,|\\,\\,) ([a-zA-Z]+)$", out match)) 
+        "(\\.|\\.\\.|,|,,) ([a-zA-Z]+)$", out match)) 
     {
         string key = match.Groups[1].Value;
         string val = match.Groups[3].Value;
@@ -393,6 +398,7 @@ void ProcessMainCmd(string inpt) {
         currDisplayEquality = eq.In(".", ",");
         state = Sub;
         currPage = 1;
+        currTableInput = inpt;
         autoInput = "display";
     }
     else throw new CommandException("Unrecognized command");
@@ -487,7 +493,8 @@ void ProcessSubCmd(string inpt) {
         );
         
         if (!save) WriteLines(lns);
-        else File.AppendAllLines(constants.Value.OutPath, lns);
+        else File.AppendAllLines(constants.Value.OutPath, 
+            lns.Prepend(currTableInput + NewLine).Append(NewLine));
     }
     else {
         var t = ScoreGrouped(CartesianJoinScore(
@@ -521,7 +528,8 @@ void ProcessSubCmd(string inpt) {
         );
         
         if (!save) WriteLines(lns);
-        else File.AppendAllLines(constants.Value.OutPath, lns);
+        else File.AppendAllLines(constants.Value.OutPath, 
+            lns.Prepend(currTableInput + NewLine).Append(NewLine));
     }
 }
 

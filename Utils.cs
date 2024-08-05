@@ -57,7 +57,7 @@ public static class Utils {
     
     public static bool In<T>(this T t, params T[] arr) => arr.Contains(t);
  
-    public static bool NegateIf(this bool a, bool b) => a ? !b : b;
+    public static bool NegateIf(this bool a, bool b) => b ? !a : a;
     
     public static IEnumerable<string> Strs<T>(this IEnumerable<T> objs) =>
         objs.Select(x => x.ToString() ?? "");
